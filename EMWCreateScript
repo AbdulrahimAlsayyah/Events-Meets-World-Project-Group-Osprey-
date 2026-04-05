@@ -1,0 +1,107 @@
+CREATE SCHEMA "EMWDatabase"; -- A SCHEMA is a place where a database is stored 
+-- Events Meets World's (EMW) Database
+create table if not exists "EMWDatabase"."CustomerAddress"
+(
+    "CustomerAddressID" bigserial primary key,
+    "HouseNumber" varchar(5) NOT NULL, -- varchar(5) not int incase of flat numbers like 4A, only 5 characters to reduce the chances of invalid data
+    "Street" varchar(25) NOT NULL CHECK ("Street" !~ '[0-9]'), -- this CHECK statement is ensuring that Street does not contain a number
+    "City" varchar(25) NOT NULL CHECK ("City" !~ '[0-9]'),
+    "PostCode" varchar(10) NOT NULL CHECK ("PostCode" ~ '.*[0-9].*') -- this CHECK statement is ensuring that PostCode contains a number
+);
+
+create table if not exists "EMWDatabase"."Membership"
+(
+    "MembershipID" bigserial primary key,
+    "Description" text(250) NOT NULL,
+    "MembershipStates" varchar NOT NULL DEFAULT 'Inactive' CHECK ("MembershipStates" IN ('Inactive', 'Active', 'Cancelled')), -- this CHECK statement ensures that MembershipStates is one of these 3 values
+    "StartDate" date NULL DEFAULT current_date CHECK ("StartDate" <= current_date), -- this CHECK statement ensures that StartDate is not in the future
+    "EndDate" date NULL DEFAULT current_date CHECK ("EndDate" <= current_date) 
+);
+
+create table if not exists "EMWDatabase"."Customer"
+(
+    "CustomerID" bigserial primary key,   
+    -- here the CONSTRAINT statements define CustomerAddressFK and MembershipFK as foreign keys while REFERENCES points to the tables the foreign keys are stored in
+    "CustomerAddressFK" bigint NOT NULL CONSTRAINT Customer_CustomerAddress_CustomerAddressID_fk REFERENCES "EMWDatabase"."CustomerAddress",
+    "MembershipFK" bigint NOT NULL CONSTRAINT Customer_Membership_MembershipID_fk REFERENCES "EMWDatabase"."Membership",
+    "FirstName" varchar(255) NOT NULL CHECK ("FirstName" !~ '[0-9]'), 
+    "LastName" varchar(255) NOT NULL CHECK ("LastName" !~ '[0-9]'),
+    "Email" varchar NOT NULL  CHECK ("Email" LIKE '%@%'), -- this CHECK statement ensures that Email contains an @
+    "RegistrationDate" date DEFAULT current_date CHECK ("RegistrationDate" <= current_date),
+    "ContactNumber" varchar(15) NOT NULL CHECK ("ContactNumber" !~ '^[A-Za-z]+$') -- this CHECK statement is ensuring that ContactNumber does not contain a letter
+);
+
+create table if not exists "EMWDatabase"."VendorType"
+(
+    "VendorTypeID" bigserial primary key,
+    "VendorType" varchar NOT NULL CHECK ("VendorType" IN ('Catering', 'Entertainment', 'Photography'))
+);
+
+create table if not exists "EMWDatabase"."VendorLocation"
+(
+    "VendorLocationID" bigserial primary key,
+    "VendorLocation" varchar NOT NULL CHECK ("VendorLocation" IN ('North London','East London','Central London','South London','West London', 'Maidstone', 'Rochester', 'Medway', 'Chelmsford', 'Colchester', 'Southend-on-Sea')), -- ensures that location only consists of London and cites in Kent and Essex as per EMW requirements
+    "VendorStreetName" varchar(25) NOT NULL CHECK ("VendorStreetName" !~ '[0-9]'),
+    "VendorBuildingNumber" varchar(5) NOT NULL
+);
+
+create table if not exists "EMWDatabase"."VendorContact"
+(
+    "VendorContactID" bigserial primary key,
+    "ContactFirstName" varchar(50) NULL CHECK ("ContactFirstName" !~ '[0-9]'),
+    "ContactLastName" varchar(50) NULL CHECK ("ContactLastName" !~ '[0-9]'),
+    "ContactNumber" varchar(20) NOT NULL CHECK ("ContactNumber" !~ '^[A-Za-z]+$'),
+    "AlternativeNumber" varchar(20) NULL CHECK ("AlternativeNumber" !~ '^[A-Za-z]+$' AND "AlternativeNumber" != "ContactNumber") -- this CHECK statement ensures that AlternativeNumber does not contain any letters and it is not the same as ContactNumber
+);
+
+create table if not exists "EMWDatabase"."Vendor"
+(
+    "VendorID" bigserial primary key,
+    "VendorTypeFK" bigint NOT NULL CONSTRAINT Vendor_VendorType_VendorTypeID_fk REFERENCES "EMWDatabase"."VendorType",
+    "VendorLocationFK" bigint NOT NULL CONSTRAINT Vendor_VendorLocation_VendorLocationID_fk REFERENCES "EMWDatabase"."VendorLocation",
+    "VendorContactFK" bigint NOT NULL CONSTRAINT Vendor_VendorContact_VendorContactID_fk REFERENCES "EMWDatabase"."VendorContact",
+    "VendorName" varchar(100) NOT NULL CHECK ("VendorName" !~ '[0-9]'),
+    "Description" text NOT NULL
+);
+
+create table if not exists "EMWDatabase"."Review"
+(
+    "ReviewID" bigserial primary key,
+    "CustomerFK" bigint NOT NULL CONSTRAINT Review_Customer_CustomerID_fk REFERENCES "EMWDatabase"."Customer",
+    "VendorFK" bigint NOT NULL CONSTRAINT Review_Vendor_VendorID_fk REFERENCES "EMWDatabase"."Vendor",
+    "ReviewContent" text NULL,
+    "Rating" int NOT NULL CHECK ("Rating" >= 1 AND "Rating" <= 5), -- Enforces 1-5 Star rating
+    "ReviewDate" date DEFAULT current_date CHECK ("ReviewDate" <= current_date)
+);
+
+create table if not exists "EMWDatabase"."Refund"
+(
+    "RefundID" bigserial primary key,
+    "RefundStatus" boolean NOT NULL,
+    "RefundAmount" double precision NULL CHECK ("RefundAmount" >= 20), -- this CHECK statement ensures that RefundAmount is not lower than the price of the cheepiest Event available -- to be confirmed with EMW
+    "RefundDate" date NULL CHECK ("RefundDate" <= current_date)
+);
+
+create table if not exists "EMWDatabase"."Payment"
+(
+    "PaymentID" bigserial primary key,
+    "CustomerFK" bigint NOT NULL CONSTRAINT Payment_Customer_CustomerID_fk REFERENCES "EMWDatabase"."Customer",
+    "RefundFK" bigint NULL CONSTRAINT Payment_Refund_RefundID_fk REFERENCES "EMWDatabase"."Refund",
+    "TotalPrice" double precision NOT NULL CHECK ("TotalPrice" >= 20), -- this CHECK statement ensures that RefundAmount is not lower than the price of the cheepiest Event available -- to be confirmed with EMW
+    "TransactionAlerts" varchar NULL CHECK ("TransactionAlerts" IN ('Payment failed, insufficient funds', 'Event Cancelled', NULL)),
+    "PaymentSuccessful" boolean NOT NULL,
+    "TransactionDate" date NOT NULL CHECK ("TransactionDate" <= current_date)
+);
+
+create table if not exists "EMWDatabase"."Event"
+(
+    "EventID" bigserial primary key,
+    "PaymentFK" bigint NOT NULL CONSTRAINT Event_Payment_PaymentID_fk REFERENCES "EMWDatabase"."Payment",
+    "VendorFK" bigint NOT NULL CONSTRAINT Event_Vendor_VendorID_fk REFERENCES "EMWDatabase"."Vendor",
+    "EventDate" date NOT NULL CHECK ("EventDate" = (current_date + 2)),
+    "EventStates" varchar NOT NULL DEFAULT 'Scheduled' CHECK ("EventStates" IN ('Scheduled', 'Completed', 'Cancelled')),
+    "EventType" varchar NOT NULL CHECK ("EventType" IN ('Birthday Party', 'Wedding', 'Anniversary'))
+);
+
+
+

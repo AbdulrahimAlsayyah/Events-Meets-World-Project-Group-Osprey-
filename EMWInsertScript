@@ -1,0 +1,90 @@
+-- This script is used to insert data into the EMWDatabase tables. it will be used to populate the database after the website is launched and customers and vendors start signing up and using the platform. The data inserted in this script is just sample data to test the functionality of the database and the website. It can be modified or deleted as needed.
+INSERT INTO "EMWDatabase"."CustomerAddress"("HouseNumber", "Street", "City", "PostCode") 
+VALUES
+('32', 'Grange Road', 'Canterbury', 'CT9 2ND'),
+('32', 'Park Lane', 'Canterbury', 'CT13 0NF'),
+('82', 'East Street', 'Canterbury', 'CT14 9DL');
+
+
+INSERT INTO "EMWDatabase"."Membership"("Description", "MembershipStates", "StartDate", "EndDate") 
+VALUES
+('Exclusive Deals, Up to 30% off on all Events', 'Inactive', NULL, NULL),
+('Exclusive Deals, Up to 30% off on all Events', 'Active', '2025-11-09', NULL),
+('Exclusive Deals, Up to 30% off on all Events', 'Cancelled', '2025-12-08', '2026-03-11');
+
+
+INSERT INTO "EMWDatabase"."Customer"("CustomerAddressFK", "MembershipFK", "FirstName", "LastName", "Email", "RegistrationDate", "ContactNumber") 
+VALUES
+((SELECT "CustomerAddressID" FROM "EMWDatabase"."CustomerAddress" WHERE "CustomerAddressID" = 1), (SELECT "MembershipID" FROM "EMWDatabase"."Membership" WHERE "MembershipID" = 1), 'Alex', 'Walker', 'alexwalker92@gmail.com', '2024-09-08', '+448800900171'),
+((SELECT "CustomerAddressID" FROM "EMWDatabase"."CustomerAddress" WHERE "CustomerAddressID" = 2), (SELECT "MembershipID" FROM "EMWDatabase"."Membership" WHERE "MembershipID" = 2), 'Jenny', 'Smith', 'jenny.smith88@yahoo.com', '2024-10-18', '+447700988543'),
+((SELECT "CustomerAddressID" FROM "EMWDatabase"."CustomerAddress" WHERE "CustomerAddressID" = 3), (SELECT "MembershipID" FROM "EMWDatabase"."Membership" WHERE "MembershipID" = 3), 'Mark', 'Johnson', 'mark.johnson01@outlook.com', '2024-09-03', '+446870900516');
+
+
+INSERT INTO "EMWDatabase"."VendorType"("VendorType") 
+VALUES
+('Catering'),
+('Entertainment'),
+('Photography');
+
+
+INSERT INTO "EMWDatabase"."VendorLocation"("VendorLocation", "VendorStreetName", "VendorBuildingNumber") 
+VALUES
+('North London', 'Baker Street', '221B'),
+('East London', 'Brick Lane', '91'),
+('Central London', 'Oxford Street', '150'),
+('South London', 'Clapham High Street', '45'),
+('West London', 'Portobello Road', '12'),
+('Maidstone', 'Week Street', '5'),
+('Rochester', 'High Street', '10'),
+('Medway', 'City Way', '20'),
+('Chelmsford', 'New Street', '30'),
+('Colchester', 'Head Street', '40'),
+('Southend-on-Sea', 'Marine Parade', '50');
+
+
+INSERT INTO "EMWDatabase"."VendorContact"("ContactFirstName", "ContactLastName", "ContactNumber", "AlternativeNumber") 
+VALUES
+('Jack', 'Noriss', '01887555666', NULL),
+('Martha', 'Lexham', '08006168789', '07700 944678'),
+(NULL, NULL, '01614101267', NULL);
+
+
+INSERT INTO "EMWDatabase"."Vendor"("VendorTypeFK", "VendorLocationFK", "VendorContactFK", "VendorName", "Description") 
+VALUES
+((SELECT "VendorTypeID" FROM "EMWDatabase"."VendorType" WHERE "VendorType" = 'Catering'), (SELECT "VendorLocationID" FROM "EMWDatabase"."VendorLocation" WHERE "VendorLocation" = 'Canterbury'), (SELECT "VendorContactID" FROM "EMWDatabase"."VendorContact" WHERE "ContactNumber" = '01887555666'), 'Jack''s Catering', 'Provides food and drink services for events and parties.'),
+((SELECT "VendorTypeID" FROM "EMWDatabase"."VendorType" WHERE "VendorType" = 'Entertainment'), (SELECT "VendorLocationID" FROM "EMWDatabase"."VendorLocation" WHERE "VendorLocation" = 'North London'), (SELECT "VendorContactID" FROM "EMWDatabase"."VendorContact" WHERE "ContactNumber" = '08006168789'), 'Tops Entertainment', 'Supplies live entertainment and event hosting services.'),
+((SELECT "VendorTypeID" FROM "EMWDatabase"."VendorType" WHERE "VendorType" = 'Photography'), (SELECT "VendorLocationID" FROM "EMWDatabase"."VendorLocation" WHERE "VendorLocation" = 'Colchester'), (SELECT "VendorContactID" FROM "EMWDatabase"."VendorContact" WHERE "ContactNumber" = '01614101267'), 'Photographic Buddies', 'Offers photography and photo booth services for special occasions.');
+
+
+INSERT INTO "EMWDatabase"."Review" ("CustomerFK", "VendorFK", "ReviewContent", "Rating", "ReviewDate") 
+VALUES 
+((SELECT "CustomerID" FROM "EMWDatabase"."Customer" WHERE "Email" = 'alexwalker92@gmail.com'), (SELECT "VendorID" FROM "EMWDatabase"."Vendor" WHERE "VendorName" = 'Jack''s Catering'), 'Great Food for the price.', 5, '2024-11-15'),
+((SELECT "CustomerID" FROM "EMWDatabase"."Customer" WHERE "Email" = 'jenny.smith88@yahoo.com'), (SELECT "VendorID" FROM "EMWDatabase"."Vendor" WHERE "VendorName" = 'Tops Entertainment'), NULL, 5, '2024-11-16'),
+((SELECT "CustomerID" FROM "EMWDatabase"."Customer" WHERE "Email" = 'mark.johnson01@outlook.com'), (SELECT "VendorID" FROM "EMWDatabase"."Vendor" WHERE "VendorName" = 'Photographic Buddies'), 'The photos were amazing!', 4, '2024-11-17');
+
+
+INSERT INTO "EMWDatabase"."Refund"("RefundStatus", "RefundAmount", "RefundDate") 
+VALUES
+(TRUE, 29.47, '2026-02-20'),
+(FALSE, NULL, NULL),
+(FALSE, NULL, NULL);
+(FALSE, NULL, NULL);
+(FALSE, 33.00, '2026-03-25');
+
+INSERT INTO "EMWDatabase"."Payment"("CustomerFK", "RefundFK", "TotalPrice", "TransactionAlerts", "PaymentSuccessful", "TransactionDate") 
+VALUES
+((SELECT "CustomerID" FROM "EMWDatabase"."Customer" WHERE "Email" = 'alexwalker92@gmail.com'), (SELECT "RefundID" FROM "EMWDatabase"."Refund" WHERE "RefundID" = 1), 29.47, 'Payment failed, insufficient funds', FALSE, '2026-02-20'),
+((SELECT "CustomerID" FROM "EMWDatabase"."Customer" WHERE "Email" = 'alexwalker92@gmail.com'), (SELECT "RefundID" FROM "EMWDatabase"."Refund" WHERE "RefundID" = 2), 40.00, NULL, TRUE, '2026-02-25'),
+((SELECT "CustomerID" FROM "EMWDatabase"."Customer" WHERE "Email" = 'jenny.smith88@yahoo.com'), (SELECT "RefundID" FROM "EMWDatabase"."Refund" WHERE "RefundID" = 3), 45.00, NULL, TRUE, '2026-02-27'),
+((SELECT "CustomerID" FROM "EMWDatabase"."Customer" WHERE "Email" = 'mark.johnson01@outlook.com'), (SELECT "RefundID" FROM "EMWDatabase"."Refund" WHERE "RefundID" = 4), 44.97, NULL, TRUE, '2026-03-21'),
+((SELECT "CustomerID" FROM "EMWDatabase"."Customer" WHERE "Email" = 'mark.johnson01@outlook.com'), (SELECT "RefundID" FROM "EMWDatabase"."Refund" WHERE "RefundID" = 5), 33.00, 'Event Cancelled, You will be refunded', FALSE, '2026-03-25');
+
+INSERT INTO "EMWDatabase"."Event"("PaymentFK", "VendorFK", "EventDate", "EventStates", "EventType") 
+VALUES
+((SELECT "PaymentID" FROM "EMWDatabase"."Payment" WHERE "PaymentID" = 1), (SELECT "VendorID" FROM "EMWDatabase"."Vendor" WHERE "VendorName" = 'Tops Entertainment'), '2026-02-25', 'Cancelled', 'Birthday Party'),
+((SELECT "PaymentID" FROM "EMWDatabase"."Payment" WHERE "PaymentID" = 2), (SELECT "VendorID" FROM "EMWDatabase"."Vendor" WHERE "VendorName" = 'Jack''s Catering'), '2026-03-19', 'Completed', 'Wedding'),
+((SELECT "PaymentID" FROM "EMWDatabase"."Payment" WHERE "PaymentID" = 3), (SELECT "VendorID" FROM "EMWDatabase"."Vendor" WHERE "VendorName" = 'Photographic Buddies'), '2026-05-25', 'Scheduled', 'Anniversary'),
+((SELECT "PaymentID" FROM "EMWDatabase"."Payment" WHERE "PaymentID" = 4), (SELECT "VendorID" FROM "EMWDatabase"."Vendor" WHERE "VendorName" = 'Jack''s Catering'), '2026-06-15', 'Scheduled', 'Birthday Party'),
+((SELECT "PaymentID" FROM "EMWDatabase"."Payment" WHERE "PaymentID" = 5), (SELECT "VendorID" FROM "EMWDatabase"."Vendor" WHERE "VendorName" = 'Photographic Buddies'), '2026-06-17', 'Cancelled', 'Wedding');
+
+
