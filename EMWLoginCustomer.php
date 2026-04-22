@@ -1,0 +1,61 @@
+<?php
+session_start();
+require 'EMWConfig.php';
+
+$message = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = $_POST['email'];
+    $password = $_POST['password'];
+
+    // ✅ FIXED QUERY (MySQL style)
+    $stmt = $conn->prepare("SELECT * FROM Customer WHERE Email = ?");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+
+    $user = $stmt->get_result()->fetch_assoc();
+
+    if ($user && $password === $user['Password']) {
+        $_SESSION['customer'] = $user;
+        header("Location: EMWClientDashboard.php");
+        exit;
+    } else {
+        echo "Invalid login";
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="EMWStyles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header class="hero">
+    <img src="EMW Logo 1.png" alt="EMW Logo" class="logo">
+</header>
+
+<div class="form">
+
+    <h2>Customer Login</h2>
+
+    <form method="POST">
+        <input type="email" name="email" placeholder="Email" required>
+        <input type="password" name="password" placeholder="Password" required>
+        <button type="submit">Login</button>
+    </form>
+
+    <p style="color:red;"><?php echo $message; ?></p>
+
+    <!-- Buttons -->
+    <a href="EMWAboutUs.php" class="btn">⬅ Back to About</a>
+    <a href="EMWRegisterCustomer.php" class="btn">Register Instead</a>
+
+</div>
+
+</body>
+</html>
