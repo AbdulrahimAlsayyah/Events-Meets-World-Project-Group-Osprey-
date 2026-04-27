@@ -2,77 +2,111 @@
 session_start();
 require 'EMWConfig.php';
 
+$message = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // 🔹 Step 1: Insert Location
-    $stmt = $conn->prepare("
-        INSERT INTO VendorLocation (VendorLocation, VendorStreetName, VendorBuildingNumber)
-        VALUES (?, ?, ?)
-    ");
+    // Check if email already exists
+    $check = $conn->prepare("SELECT VendorID FROM Vendor WHERE VendorEmail = ?");
+    $check->bind_param("s", $_POST['email']);
+    $check->execute();
+    $checkResult = $check->get_result();
 
-    $stmt->bind_param(
-        "sss",
-        $_POST['location'],
-        $_POST['street'],
-        $_POST['buildingNumber']
-    );
+    if ($checkResult->num_rows > 0) {
+        $message = "Email already registered.";
+    } else {
 
-    $stmt->execute();
-    $locationID = $conn->insert_id;
+        // ðŸ”¹ Step 1: Insert Location
+        $stmt = $conn->prepare("
+            INSERT INTO VendorLocation (VendorLocation, VendorStreetName, VendorBuildingNumber)
+            VALUES (?, ?, ?)
+        ");
+    
+        $stmt->bind_param(
+            "sss",
+            $_POST['location'],
+            $_POST['street'],
+            $_POST['buildingNumber']
+        );
+    
+        $stmt->execute();
 
-    // 🔹 Step 2: Insert Contact
-    $stmt = $conn->prepare("
-        INSERT INTO VendorContact (ContactFirstName, ContactLastName, ContactNumber, AlternativeNumber)
-        VALUES (?, ?, ?, ?)
-    ");
+        if (!$stmt->execute()) {
+            $message = "Error saving Vendor Location.";
+        } else {
 
-    $stmt->bind_param(
-        "ssss",
-        $_POST['contactFirstName'],
-        $_POST['contactLastName'],
-        $_POST['contactNumber'],
-        $_POST['altNumber']
-    );
+            $locationID = $conn->insert_id;
 
-    $stmt->execute();
-    $contactID = $conn->insert_id;
+            // ðŸ”¹ Step 2: Insert Contact
+            $stmt = $conn->prepare("
+                INSERT INTO VendorContact (ContactFirstName, ContactLastName, ContactNumber, AlternativeNumber)
+                VALUES (?, ?, ?, ?)
+            ");
+        
+            $stmt->bind_param(
+                "ssss",
+                $_POST['contactFirstName'],
+                $_POST['contactLastName'],
+                $_POST['contactNumber'],
+                $_POST['altNumber']
+            );
+        
+            $stmt->execute();
+            if (!$stmt->execute()) {
+            $message = "Error saving Vendor Contact.";
+            } else {
+                $contactID = $conn->insert_id;
+                // ðŸ”¹ Step 3: Get VendorTypeID
+                $stmt = $conn->prepare("SELECT VendorTypeID FROM VendorType WHERE VendorType = ?");
+                $stmt->bind_param("s", $_POST['vendorType']);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $type = $result->fetch_assoc();
+                $typeID = $type['VendorTypeID'];
 
-    // 🔹 Step 3: Get VendorTypeID
-    $stmt = $conn->prepare("SELECT VendorTypeID FROM VendorType WHERE VendorType = ?");
-    $stmt->bind_param("s", $_POST['vendorType']);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $type = $result->fetch_assoc();
-    $typeID = $type['VendorTypeID'];
-
-    // 🔹 Step 4: Insert Vendor
-    $stmt = $conn->prepare("
-        INSERT INTO Vendor
-        (VendorTypeFK, VendorLocationFK, VendorContactFK, VendorName, VendorEmail, VendorPassword, Description)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ");
-
-    $stmt->bind_param(
-        "iiissss",
-        $typeID,
-        $locationID,
-        $contactID,
-        $_POST['name'],
-        $_POST['email'],
-        $_POST['password'], // keeping your plain password logic
-        $_POST['description']
-    );
-
-    $stmt->execute();
-
-    // 🔹 Step 5: Auto login
-    $_SESSION['vendor'] = [
-        'VendorName' => $_POST['name'],
-        'VendorEmail' => $_POST['email']
-    ];
-
-    header("Location: EMWVendorDashboard.php");
-    exit;
+    
+                // ðŸ”¹ Step 4: Insert Vendor
+                $stmt = $conn->prepare("
+                    INSERT INTO Vendor
+                    (VendorTypeFK, VendorLocationFK, VendorContactFK, VendorName, VendorEmail, VendorPassword, Description)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ");
+            
+                $stmt->bind_param(
+                    "iiissss",
+                    $typeID,
+                    $locationID,
+                    $contactID,
+                    $_POST['name'],
+                    $_POST['email'],
+                    $_POST['password'], // keeping your plain password logic
+                    $_POST['description']
+                );
+            
+                $stmt->execute();
+    
+                if ($stmt->execute()) {
+    
+                    // Get full user row for session
+                    $vendorID = $conn->insert_id;
+    
+                    $getVendor = $conn->prepare("SELECT * FROM Vendor WHERE VendorID = ?");
+                    $getVendor->bind_param("i", $vendorID);
+                    $getVendor->execute();
+                    $vendor = $getVendor->get_result()->fetch_assoc();
+    
+                    // Store FULL row (important fix)
+                    $_SESSION['vendor'] = $vendor;
+    
+                    header("Location: EMWVendorDashboard.php");
+                    exit;
+    
+                } else {
+                    $message = "Error creating Vendor account.";
+                }
+            }
+        }
+    }
 }
 ?>
 
@@ -141,10 +175,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="text" name="altNumber" placeholder="Alternative Number">
 
         <button type="submit">Register</button>
+        <?php if (!empty($message)): ?>
+        <p style="color:red;"><?php echo $message; ?></p>
+        <?php endif; ?>
 
     </form>
 
-    <a href="EMWAboutUs.php" class="btn">⬅ Back to About</a>
+    <a href="EMWAboutUs.php" class="btn">â¬… Back to About</a>
     <a href="EMWLoginVendor.php" class="btn">Login Instead</a>
 
 </div>
