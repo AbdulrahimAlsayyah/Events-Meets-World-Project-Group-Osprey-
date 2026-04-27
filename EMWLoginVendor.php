@@ -5,25 +5,38 @@ require 'EMWConfig.php';
 $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
     $email = $_POST['email'];
     $password = $_POST['password'];
 
-    // ✅ MySQL syntax
+    // Prepare query
     $stmt = $conn->prepare("SELECT * FROM Vendor WHERE VendorEmail = ?");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
+    
+    if ($stmt) {
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
 
-    $vendor = $stmt->get_result()->fetch_assoc();
+        $result = $stmt->get_result();
+        $vendor = $result->fetch_assoc();
 
-    // ✅ YOUR requested password check
-    if ($vendor && $password === $vendor['VendorPassword']) {
-        $_SESSION['vendor'] = $vendor;
-        header("Location: EMWVendorDashboard.php");
-        exit;
+        // Your requested password check
+        if ($vendor && $password === $vendor['VendorPassword']) {
+
+            // tore FULL user row (important for dashboard)
+            $_SESSION['vendor'] = $vendor;
+
+            header("Location: EMWVendorDashboard.php");
+            exit;
+
+        } else {
+            $message = "Invalid email or password";
+        }
+
     } else {
-        $message = "Invalid login";
+        $message = "Something went wrong. Try again.";
     }
 }
+
 ?>
 
 <!DOCTYPE html>
