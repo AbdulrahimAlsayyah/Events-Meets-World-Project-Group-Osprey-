@@ -2,61 +2,87 @@
 session_start();
 require 'EMWConfig.php';
 
+$message = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // 🔹 Step 1: Insert Address
-    $stmt = $conn->prepare("
-        INSERT INTO CustomerAddress (HouseNumber, Street, City, PostCode)
-        VALUES (?, ?, ?, ?)
-    ");
+    // Check if email already exists
+    $check = $conn->prepare("SELECT CustomerID FROM Customer WHERE Email = ?");
+    $check->bind_param("s", $_POST['email']);
+    $check->execute();
+    $checkResult = $check->get_result();
 
-    $stmt->bind_param(
-        "ssss",
-        $_POST['houseNumber'],
-        $_POST['street'],
-        $_POST['city'],
-        $_POST['postCode']
-    );
+    if ($checkResult->num_rows > 0) {
+        $message = "Email already registered.";
+    } else {
 
-    $stmt->execute();
-    $addressID = $conn->insert_id;
+        // Step 1: Insert Address
+        $stmt = $conn->prepare("
+            INSERT INTO CustomerAddress (HouseNumber, Street, City, PostCode)
+            VALUES (?, ?, ?, ?)
+        ");
 
-    // 🔹 Step 2: Create Membership (default = Active)
-    $stmt = $conn->prepare("
-        INSERT INTO Membership (Description, MembershipStates)
-        VALUES ('Exclusive Deals, Up to 30% off on all Events', 'Inactive')
-    ");
-    $stmt->execute();
-    $membershipID = $conn->insert_id;
+        $stmt->bind_param(
+            "ssss",
+            $_POST['houseNumber'],
+            $_POST['street'],
+            $_POST['city'],
+            $_POST['postCode']
+        );
 
-    // 🔹 Step 3: Insert Customer
-    $stmt = $conn->prepare("
-        INSERT INTO Customer
-        (CustomerAddressFK, MembershipFK, FirstName, LastName, Email, Password, ContactNumber)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ");
+        if (!$stmt->execute()) {
+            $message = "Error saving address.";
+        } else {
 
-    $stmt->bind_param(
-        "iisssss",
-        $addressID,
-        $membershipID,
-        $_POST['firstName'],
-        $_POST['lastName'],
-        $_POST['email'],
-        $_POST['password'], // (keeping your plain password logic)
-        $_POST['phone']
-    );
+            $addressID = $conn->insert_id;
 
-    $stmt->execute();
+            // Step 2: Create Membership
+            $stmt = $conn->prepare("
+                INSERT INTO Membership (Description, MembershipStates)
+                VALUES ('Exclusive Deals, Up to 30% off on all Events', 'Inactive')
+            ");
+            $stmt->execute();
+            $membershipID = $conn->insert_id;
 
-    // 🔹 Step 4: Auto login
-    $_SESSION['customer'] = [
-        'FirstName' => $_POST['firstName'],
-        'Email' => $_POST['email']
-    ];
+            // Step 3: Insert Customer
+            $stmt = $conn->prepare("
+                INSERT INTO Customer
+                (CustomerAddressFK, MembershipFK, FirstName, LastName, Email, Password, ContactNumber)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ");
 
-    header("Location: EMWClientDashboard.php");
-    exit;
+            $stmt->bind_param(
+                "iisssss",
+                $addressID,
+                $membershipID,
+                $_POST['firstName'],
+                $_POST['lastName'],
+                $_POST['email'],
+                $_POST['password'], // keeping your plain password logic
+                $_POST['phone']
+            );
+
+            if ($stmt->execute()) {
+
+                // Get full user row for session
+                $userID = $conn->insert_id;
+
+                $getUser = $conn->prepare("SELECT * FROM Customer WHERE CustomerID = ?");
+                $getUser->bind_param("i", $userID);
+                $getUser->execute();
+                $user = $getUser->get_result()->fetch_assoc();
+
+                // Store FULL row (important fix)
+                $_SESSION['customer'] = $user;
+
+                header("Location: EMWClientDashboard.php");
+                exit;
+
+            } else {
+                $message = "Error creating account.";
+            }
+        }
+    }
 }
 ?>
 
@@ -65,6 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Register</title>
+
     <link rel="stylesheet" href="EMWStyles.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;800;900&display=swap" rel="stylesheet">
 </head>
@@ -97,6 +125,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <button type="submit">Register</button>
     </form>
+
+    <!-- Error message -->
+    <?php if (!empty($message)): ?>
+        <p style="color:red;"><?php echo $message; ?></p>
+    <?php endif; ?>
 
     <a href="EMWAboutUs.php" class="btn">⬅ Back to About</a>
     <a href="EMWLoginCustomer.php" class="btn">Login Instead</a>
