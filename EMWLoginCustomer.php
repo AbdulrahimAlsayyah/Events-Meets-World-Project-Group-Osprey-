@@ -1,26 +1,39 @@
-<?php
+<?php 
 session_start();
 require 'EMWConfig.php';
 
 $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
     $email = $_POST['email'];
     $password = $_POST['password'];
 
-    // ✅ FIXED QUERY (MySQL style)
+    // Prepare query
     $stmt = $conn->prepare("SELECT * FROM Customer WHERE Email = ?");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
+    
+    if ($stmt) {
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
 
-    $user = $stmt->get_result()->fetch_assoc();
+        $result = $stmt->get_result();
+        $user = $result->fetch_assoc();
 
-    if ($user && $password === $user['Password']) {
-        $_SESSION['customer'] = $user;
-        header("Location: EMWClientDashboard.php");
-        exit;
+        // Your requested password check
+        if ($user && $password === $user['Password']) {
+
+            // tore FULL user row (important for dashboard)
+            $_SESSION['customer'] = $user;
+
+            header("Location: EMWClientDashboard.php");
+            exit;
+
+        } else {
+            $message = "Invalid email or password";
+        }
+
     } else {
-        echo "Invalid login";
+        $message = "Something went wrong. Try again.";
     }
 }
 ?>
@@ -30,6 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Login</title>
+
     <link rel="stylesheet" href="EMWStyles.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;800;900&display=swap" rel="stylesheet">
 </head>
@@ -49,9 +64,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="submit">Login</button>
     </form>
 
-    <p style="color:red;"><?php echo $message; ?></p>
+    <!-- Error message -->
+    <?php if (!empty($message)): ?>
+        <p style="color:red;"><?php echo $message; ?></p>
+    <?php endif; ?>
 
-    <!-- Buttons -->
+    <!-- Navigation -->
     <a href="EMWAboutUs.php" class="btn">⬅ Back to About</a>
     <a href="EMWRegisterCustomer.php" class="btn">Register Instead</a>
 
