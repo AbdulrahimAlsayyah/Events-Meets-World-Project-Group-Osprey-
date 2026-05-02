@@ -1,31 +1,91 @@
 <?php
 session_start();
-require 'phpConfig.php';
+require 'EMWConfig.php';
 
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'client') {
-    header("Location: phpLogin.php");
+$message = "";
+
+// 🔒 Ensure customer logged in
+if (!isset($_SESSION['customer'])) {
+    header("Location: EMWLoginCustomer.php");
     exit;
 }
 
-$user = $_SESSION['user'];
-$message = '';
-$success = '';
+$customerID = $_SESSION['customer']['CustomerID'];
+
+// Load vendors for dropdown
+$vendors = $conn->query("SELECT VendorID, VendorName FROM Vendor");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $event_type = $_POST['event_type'];
-    $date = $_POST['date'];
-    $guests = $_POST['guests'];
-    $budget = $_POST['budget'];
-    $details = $_POST['details'];
 
-    // Save booking request to database
-    $stmt = $conn->prepare("INSERT INTO bookings (client_id, event_type, event_date, guests, budget, details, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())");
-    $stmt->bind_param("isssds", $user['id'], $event_type, $date, $guests, $budget, $details);
-    
-    if ($stmt->execute()) {
-        $success = "Booking request submitted successfully! Vendors will contact you soon.";
-    } else {
-        $message = "Error submitting booking. Please try again.";
+    $eventType = $_POST['eventType'];
+    $eventDate = $_POST['eventDate'];
+    $vendorID  = $_POST['vendor'];
+
+    // Example price (replace with real logic if needed)
+    $totalPrice = 50.00;
+
+    $conn->begin_transaction();
+
+    try {
+
+        // ✅ Step 1: Create EMPTY refund record (default = not processed)
+        $stmt = $conn->prepare("
+            INSERT INTO Refund (RefundStatus, RefundAmount, RefundDate)
+            VALUES (0, NULL, NULL)
+        ");
+        $stmt->execute();
+
+        $refundID = $conn->insert_id;
+
+        // ✅ Step 2: Insert Payment
+        $paymentSuccessful = 1; // change logic if needed
+
+        $stmt = $conn->prepare("
+            INSERT INTO Payment
+            (CustomerFK, RefundFK, TotalPrice, TransactionAlerts, PaymentSuccessful, TransactionDate)
+            VALUES (?, ?, ?, NULL, ?, NOW())
+        ");
+
+        $stmt->bind_param("iidi", $customerID, $refundID, $totalPrice, $paymentSuccessful);
+        $stmt->execute();
+
+        $paymentID = $conn->insert_id;
+
+        // ❌ If payment fails → process refund immediately
+        if ($paymentSuccessful == 0) {
+
+            $stmt = $conn->prepare("
+                UPDATE Refund
+                SET RefundStatus = 1,
+                    RefundAmount = ?,
+                    RefundDate = CURDATE()
+                WHERE RefundID = ?
+            ");
+
+            $stmt->bind_param("di", $totalPrice, $refundID);
+            $stmt->execute();
+
+            throw new Exception("Payment failed");
+        }
+
+        // ✅ Step 3: Insert Event
+        $stmt = $conn->prepare("
+            INSERT INTO Eventt
+            (PaymentFK, VendorFK, EventDate, EventStates, EventType)
+            VALUES (?, ?, ?, 'Scheduled', ?)
+        ");
+
+        $stmt->bind_param("iiss", $paymentID, $vendorID, $eventDate, $eventType);
+        $stmt->execute();
+
+        $conn->commit();
+
+        $message = "Event booked successfully!";
+
+    } catch (Exception $e) {
+
+        $conn->rollback();
+        $message = "Booking failed. Try again.";
     }
 }
 ?>
@@ -33,96 +93,119 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Book An Event - Eventify</title>
-  <link rel="stylesheet" href="cssStyles.css">
-  <style>
-    .booking-container { max-width: 700px; margin: 2rem auto; padding: 2rem; }
-    .booking-form { background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1rem; }
-    .full-width { grid-column: 1 / -1; }
-    textarea { resize: vertical; min-height: 120px; }
-    .vendor-suggestions { background: #f8fafc; padding: 1.5rem; border-radius: 12px; margin: 1.5rem 0; }
-    @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
-  </style>
+    <title>Book Event</title>
+    <link rel="stylesheet" href="EMWStyles.css">
+
+    <style>
+        .btn { padding: 10px; background: black; color: white; border: none; }
+
+        label {
+            display: block;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #999;
+            box-sizing: border-box;
+            font-size: 15px;
+        }
+
+        .success-message { color: green; }
+    </style>
 </head>
+
 <body>
-  <div class="booking-container">
-    <div style="text-align: center; margin-bottom: 2rem;">
-      <a href="clientDashboard.php" class="btn" style="background: #6b7280;">← Back to Dashboard</a>
+
+<!-- TOP NAV (same as A) -->
+<div class="top-nav">
+    <img src="EMW Logo 1.png" class="logo">
+    <div class="nav-links">
+        <a href="EMWAboutUs.php">About Us</a>
+        <a href="#">Contact Vendors</a>
     </div>
+    <a href="EMWAboutUs.php" class="logout-btn">Log Out</a>
+</div>
 
-    <div class="booking-form">
-      <h2>📅 Book Your Event</h2>
-      <p style="color: #64748b; margin-bottom: 2rem;">Fill out details and our verified vendors will send you personalized quotes.</p>
-      
-      <?php if ($success): ?>
-        <div class="error" style="background: #ecfdf5; color: #166534; border-left-color: #10b981;">
-          <?= $success ?>
-        </div>
-      <?php endif; ?>
-      
-      <?php if ($message): ?>
-        <div class="error"><?= $message ?></div>
-      <?php endif; ?>
+<!-- DASHBOARD LAYOUT -->
+<div class="dashboard">
 
-      <form method="POST" action="">
-        <div class="form-row">
-          <div class="form-group">
-            <label>Your Name</label>
-            <input type="text" value="<?= htmlspecialchars($user['name']) ?>" readonly>
-          </div>
-          <div class="form-group">
-            <label>Your Email</label>
-            <input type="email" value="<?= htmlspecialchars($user['email']) ?>" readonly>
-          </div>
-        </div>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <h3>Dashboard</h3>
+        <ul>
+            <li>My Events</li>
+            <li>Browse Vendors</li>
+            <li>Messages</li>
+            <li>Reviews</li>
+            <li>Settings</li>
+        </ul>
+    </aside>
 
-        <div class="form-row">
-          <div class="form-group">
+    <!-- MAIN CONTENT -->
+    <main class="main">
+
+        <h2>Book an Event</h2>
+        <p>Fill in the details below to schedule your event.</p>
+
+        <?php if ($message): ?>
+            <p class="success-message"><b><?php echo $message; ?></b></p>
+        <?php endif; ?>
+
+        <form method="POST" class="form">
+
+            <!-- Event Type -->
             <label>Event Type *</label>
-            <select name="event_type" required>
-              <option value="">Select event type...</option>
-              <option value="Wedding">💒 Wedding</option>
-              <option value="Birthday">🎂 Birthday Party</option>
-              <option value="Corporate">🏢 Corporate Event</option>
-              <option value="Workshop">📚 Workshop/Seminar</option>
-              <option value="Baby Shower">👶 Baby Shower</option>
-              <option value="Anniversary">💕 Anniversary</option>
-              <option value="Other">🎉 Other</option>
+            <select name="eventType" required>
+                <option value="">Select</option>
+                <option>Wedding</option>
+                <option>Birthday Party</option>
+                <option>Anniversary</option>
             </select>
-          </div>
-          <div class="form-group">
+
+            <!-- Event Date -->
             <label>Event Date *</label>
-            <input type="date" name="date" required>
-          </div>
-        </div>
+            <input type="date" name="eventDate" required>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label>Expected Guests</label>
-            <input type="number" name="guests" min="1" max="1000" placeholder="e.g. 50">
-          </div>
-          <div class="form-group">
-            <label>Budget (USD) *</label>
-            <input type="number" name="budget" min="50" max="50000" step="50" required placeholder="e.g. 1500">
-          </div>
-        </div>
+            <!-- Vendor -->
+            <label>Select Vendor *</label>
+            <select name="vendor" required>
+                <option value="">Choose Vendor</option>
+                <?php while ($v = $vendors->fetch_assoc()): ?>
+                    <option value="<?php echo $v['VendorID']; ?>">
+                        <?php echo $v['VendorName']; ?>
+                    </option>
+                <?php endwhile; ?>
+            </select>
+            
+              <label>Number of Guests</label>
+            <input type="number" name="guests" min="1" step="1" value="50">
 
-        <div class="form-group full-width">
-          <label>Event Details *</label>
-          <textarea name="details" required placeholder="Describe your event: venue preference, theme, special requirements..."></textarea>
-        </div>
+            <label>Venue / Location</label>
+            <input type="text" name="location">
 
-        <div class="vendor-suggestions">
-          <h4>💡 Pro Tip:</h4>
-          <p>Our top vendors will see your request and send personalized quotes within 24 hours. Be specific about your needs for best matches!</p>
-        </div>
+            <label>Special Requirements</label>
+            <textarea name="requirements"></textarea>
 
-        <button type="submit" style="width: 100%; padding: 1.25rem; font-size: 18px; background: linear-gradient(135deg, #10b981, #059669);">Send Booking Request</button>
-      </form>
-    </div>
-  </div>
+            <h3>Payment (Simulated)</h3>
+
+            <input type="text" name="cardNumber" placeholder="Card Number">
+            <input type="text" name="expiryDate" placeholder="Expiry Date">
+            <input type="text" name="cvv" placeholder="CVV">
+
+
+            <!-- Submit -->
+            <br><br>
+            <button type="submit" class="btn">Book Event</button>
+
+        </form>
+
+    </main>
+
+</div>
+
 </body>
 </html>
