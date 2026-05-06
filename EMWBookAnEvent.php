@@ -4,7 +4,7 @@ require 'EMWConfig.php';
 
 $message = "";
 
-// 🔒 Ensure customer logged in
+// Ensure customer logged in
 if (!isset($_SESSION['customer'])) {
     header("Location: EMWLoginCustomer.php");
     exit;
@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
 
-        // ✅ Step 1: Create EMPTY refund record (default = not processed)
+        //  Step 1: Create EMPTY refund record (default = not processed)
         $stmt = $conn->prepare("
             INSERT INTO Refund (RefundStatus, RefundAmount, RefundDate)
             VALUES (0, NULL, NULL)
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $refundID = $conn->insert_id;
 
-        // ✅ Step 2: Insert Payment
+        // Step 2: Insert Payment
         $paymentSuccessful = 1; // change logic if needed
 
         $stmt = $conn->prepare("
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $paymentID = $conn->insert_id;
 
-        // ❌ If payment fails → process refund immediately
+        // If payment fails → process refund immediately
         if ($paymentSuccessful == 0) {
 
             $stmt = $conn->prepare("
@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception("Payment failed");
         }
 
-        // ✅ Step 3: Insert Event
+        // Step 3: Insert Event
         $stmt = $conn->prepare("
             INSERT INTO Eventt
             (PaymentFK, VendorFK, EventDate, EventStates, EventType)
