@@ -2,121 +2,300 @@
 session_start();
 require 'EMWConfig.php';
 
-$message = "";
-
-// Ensure customer logged in
+// Protect page: customer must be logged in
 if (!isset($_SESSION['customer'])) {
     header("Location: EMWLoginCustomer.php");
     exit;
 }
 
-$customerID = $_SESSION['customer']['CustomerID'];
+// Get search/filter values
+$search = $_GET['search'] ?? '';
+$type = $_GET['type'] ?? '';
+$location = $_GET['location'] ?? '';
 
-// Get Locations for the filter dropdown
-$locations_query = "SELECT * FROM VendorLocation";
-$locations_result = mysqli_query($conn, $locations_query);
+// Build SQL query
+$sql = "
+    SELECT 
+        Vendor.VendorID,
+        Vendor.VendorName,
+        Vendor.VendorEmail,
+        Vendor.Description,
+        VendorType.VendorType,
+        VendorLocation.VendorLocation,
+        VendorLocation.VendorStreetName,
+        VendorLocation.VendorBuildingNumber
+    FROM Vendor
+    JOIN VendorType ON Vendor.VendorTypeFK = VendorType.VendorTypeID
+    JOIN VendorLocation ON Vendor.VendorLocationFK = VendorLocation.VendorLocationID
+    WHERE 1 = 1
+";
 
-//Type of vendors filtered
-$types_query = "SELECT * FROM VendorType";
-$types_result =  mysqli_query($conn, $types_query);
+$params = [];
+$types = "";
+
+// Search by vendor name, type, location, or description
+if (!empty($search)) {
+    $sql .= "
+        AND (
+            Vendor.VendorName LIKE ?
+            OR Vendor.Description LIKE ?
+            OR VendorType.VendorType LIKE ?
+            OR VendorLocation.VendorLocation LIKE ?
+        )
+    ";
+
+    $searchTerm = "%" . $search . "%";
+    $params[] = $searchTerm;
+    $params[] = $searchTerm;
+    $params[] = $searchTerm;
+    $params[] = $searchTerm;
+    $types .= "ssss";
+}
+
+// Filter by vendor type
+if (!empty($type)) {
+    $sql .= " AND VendorType.VendorType = ?";
+    $params[] = $type;
+    $types .= "s";
+}
+
+// Filter by location
+if (!empty($location)) {
+    $sql .= " AND VendorLocation.VendorLocation = ?";
+    $params[] = $location;
+    $types .= "s";
+}
+
+$sql .= " ORDER BY Vendor.VendorName ASC";
+
+$stmt = $conn->prepare($sql);
+
+// Bind parameters only if filters exist
+if (!empty($params)) {
+    $stmt->bind_param($types, ...$params);
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
+
+$vendors = [];
+
+while ($row = $result->fetch_assoc()) {
+    $vendors[] = $row;
+}
 ?>
 
 <!DOCTYPE html>
-<html> lang="en">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Browse Vendors</title>
-<link rel="stylesheet" href="EMWStyles.css">
+    <meta charset="UTF-8">
+    <title>Browse Vendors</title>
+    <link rel="stylesheet" href="EMWStyles.css">
 
- <style>
-    .container { display: flex; }
-    .sidebar { width: 200px; background: #d9534f; color: white; height: 100vh; padding: 20px; }
-    .sidebar a { color: white; display: block; padding: 10px 0; text-decoration: none; } 
-    .main-content { flex: 1; padding: 20px; }
-    .vendor-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-    .vendor-card { border: 1px solid #ddd; padding: 15px; text-align: center; }
-    .filter-bar { margin-bottom: 20px; background: #f4f4f4; padding: 15px; }
-  </style>
+    <style>
+        /* Keep sidebar links white */
+        .sidebar a,
+        .sidebar a:visited,
+        .sidebar a:hover,
+        .sidebar a:active {
+            color: white;
+            text-decoration: none;
+        }
+
+        /* Page layout */
+        .vendors-box {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            max-width: 1000px;
+        }
+
+        .vendor-search-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+
+        .vendor-search-form input,
+        .vendor-search-form select {
+            padding: 10px;
+            min-width: 190px;
+        }
+
+        .black-btn {
+            background: black;
+            color: white;
+            padding: 10px 28px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .black-btn:hover {
+            background: #333;
+        }
+
+        .vendor-scroll {
+            max-height: 420px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .vendor-card {
+            background: white;
+            border-left: 5px solid #E15050;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        .vendor-card strong {
+            font-size: 18px;
+        }
+
+        .vendor-card p {
+            margin: 6px 0;
+        }
+
+        .vendor-actions {
+            margin-top: 12px;
+        }
+
+        .clear-link {
+            display: inline-block;
+            padding: 10px 18px;
+            background: #ccc;
+            color: black;
+            text-decoration: none;
+            border-radius: 6px;
+        }
+
+        .scroll-note {
+            text-align: center;
+            color: #555;
+            font-size: 18px;
+        }
+    </style>
 </head>
+
 <body>
-  
+
+<!-- Top navigation -->
 <div class="top-nav">
     <img src="EMW Logo 1.png" class="logo">
-<div class="container"> 
-    <nav class="sidebar">
-       <a href="Dashboard.php">Dashboard</a> 
-       <a href="MyEvents.php">My Events</a>
-       <a href="EMWBrowseVendors.php"style="font-weight:bold;">Browse Vendors</a>
-       <a href="Messages.php">Messages</a>
-       <a href="Settings.php">Settings</a>
-    </nav>
-  
-    <main class="main-content"> 
-      <h1>Plan Your Perfect Event</h1> 
-      <p>Discover vendors • Book instantly • Manage everything</p>
 
-<section class="filter-bar"> 
-    <form method="GET" action="EMWBrowseVendors.php"> 
-         <input type="text" name="search" placeholder="Search for your Vendor">
-      
-         <select name="type"> 
-              <option value="">All Types</option> 
-              <?php while($type = mysqli_fetch_assoc($types_result)): ?> 
-                   <option value="<?php echo $type['VendorTypeID']; ?>"><?php echo $type['VendorType']; ?></option> 
-              <?php endwhile; ?> 
-         </select> 
-      
-      <select name="location"> 
-           <option value="">All Locations</option> 
-           <?php while($loc = mysqli_fetch_assoc($locations_result)): ?> 
-              <option value="<?php echo $loc['VendorLocationID']; ?>"><?php echo $loc['VendorLocation']; ?></option> 
-           <?php endwhile; ?> 
-      </select> 
-      
-      <button type="submit">Search</button> 
-    </form> 
-</section>
+    <div class="nav-links">
+        <a href="EMWAboutUs.php">About Us</a>
+        <a href="#">Contact Vendor</a>
+    </div>
 
-<?php 
-// Building the query 
-$sql = "SELECT v.*, l.VendorLocation 
-        FROM Vendors v 
-        JOIN VendorLocation l ON v.VendorLocationFK = l.VendorLocationID 
-        WHERE 1=1"; 
-if (!empty($_GET['type'])) { 
-    $type = mysqli_real_escape_string($conn, $_GET['type']); 
-    $sql .= " AND v.VendorTypeFK = '$type'"; 
-} 
-if(!empty($_GET['location'])) { 
-   $loc = mysqli_real_escape_string($conn, $_GET['location']); 
-   $sql .= " AND v.VendorLocationFK = '$loc'"; 
-} 
-if (!empty($_GET['search'])) { 
-    $search = mysqli_real_escape_string($conn, $_GET['search']); 
-    $sql .= " AND v.VendorName LIKE '%$search%'"; 
-} 
-  // Limit to most popular (top 3) if no filters are applied, or show all results 
-  $sql .= " LIMIT 6"; 
-  $result = mysqli_query($conn, $sql); 
-  ?> 
-      
-  <div class="vendor-grid"> 
-        <?php if(mysqli_num_rows($result) > 0): ?> 
-          <?php while($row = mysqli_fetch_assoc($result)): ?> 
-            <div class="vendor-card"> 
-              <div style="background:#eee; height:150px; margin-bottom:10px;">Vendor Photo</div> 
-                <h3><?php echo$row['VendorName']; ?></h3> 
-                <p>Location: <?php echo $row['VendorLocation']; ?></p>
-                <p><?php echosubstr($row['Description'], 0, 50); ?>...</p> 
-                <a href="EMWBookAnEvent.php?vendor_id=<?php echo $row['VendorID']; ?>" class="btn">View Profile / Book</a> 
-              </div> 
-           <?php endwhile; ?> 
-         <?php else: ?> 
-          <p>No vendors found matching your criteria.</p> 
-         <?php endif; ?> 
-       </div> 
-     </main> 
-   </div> 
+    <a href="EMWAboutUs.php" class="logout-btn">Log Out</a>
+</div>
 
-</body> 
+<div class="dashboard">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <ul>
+            <li><a href="EMWClientDashboard.php">Return to Dashboard</a></li>
+            <li><a href="EMWCustomerBookings.php">My Events</a></li>
+            <li><a href="#">Messages</a></li>
+            <li><a href="EMWCustomerReviews.php">Reviews</a></li>
+            <li><a href="#">Settings</a></li>
+        </ul>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+        <h2>Plan Your Perfect Event</h2>
+        <p>Discover vendors • Book instantly • Manage everything</p>
+
+        <div class="vendors-box">
+
+            <!-- Vendor search/filter form -->
+            <form method="GET" class="vendor-search-form">
+                <input 
+                    type="text" 
+                    name="search" 
+                    placeholder="Search for your Vendor"
+                    value="<?php echo htmlspecialchars($search); ?>"
+                >
+
+                <select name="type">
+                    <option value="">All Types</option>
+                    <option value="Catering" <?php echo $type === 'Catering' ? 'selected' : ''; ?>>Catering</option>
+                    <option value="Entertainment" <?php echo $type === 'Entertainment' ? 'selected' : ''; ?>>Entertainment</option>
+                    <option value="Photography" <?php echo $type === 'Photography' ? 'selected' : ''; ?>>Photography</option>
+                </select>
+
+                <select name="location">
+                    <option value="">All Locations</option>
+                    <option value="North London" <?php echo $location === 'North London' ? 'selected' : ''; ?>>North London</option>
+                    <option value="East London" <?php echo $location === 'East London' ? 'selected' : ''; ?>>East London</option>
+                    <option value="Central London" <?php echo $location === 'Central London' ? 'selected' : ''; ?>>Central London</option>
+                    <option value="South London" <?php echo $location === 'South London' ? 'selected' : ''; ?>>South London</option>
+                    <option value="West London" <?php echo $location === 'West London' ? 'selected' : ''; ?>>West London</option>
+                    <option value="Maidstone" <?php echo $location === 'Maidstone' ? 'selected' : ''; ?>>Maidstone</option>
+                    <option value="Rochester" <?php echo $location === 'Rochester' ? 'selected' : ''; ?>>Rochester</option>
+                    <option value="Medway" <?php echo $location === 'Medway' ? 'selected' : ''; ?>>Medway</option>
+                    <option value="Chelmsford" <?php echo $location === 'Chelmsford' ? 'selected' : ''; ?>>Chelmsford</option>
+                    <option value="Colchester" <?php echo $location === 'Colchester' ? 'selected' : ''; ?>>Colchester</option>
+                    <option value="Southend-on-Sea" <?php echo $location === 'Southend-on-Sea' ? 'selected' : ''; ?>>Southend-on-Sea</option>
+                    <option value="Canterbury" <?php echo $location === 'Canterbury' ? 'selected' : ''; ?>>Canterbury</option>
+                </select>
+
+                <button type="submit" class="black-btn">Search</button>
+            </form>
+
+            <!-- Vendor results -->
+            <h3>Available Vendors</h3>
+
+            <div class="vendor-scroll">
+                <?php if (count($vendors) > 0): ?>
+                    <?php foreach ($vendors as $vendor): ?>
+                        <div class="vendor-card">
+                            <strong><?php echo htmlspecialchars($vendor['VendorName']); ?></strong>
+
+                            <p>
+                                Type: <?php echo htmlspecialchars($vendor['VendorType']); ?>
+                            </p>
+
+                            <p>
+                                Location:
+                                <?php echo htmlspecialchars($vendor['VendorLocation']); ?>,
+                                <?php echo htmlspecialchars($vendor['VendorBuildingNumber']); ?>
+                                <?php echo htmlspecialchars($vendor['VendorStreetName']); ?>
+                            </p>
+
+                            <p>
+                                Email: <?php echo htmlspecialchars($vendor['VendorEmail']); ?>
+                            </p>
+
+                            <p>
+                                <?php echo htmlspecialchars($vendor['Description']); ?>
+                            </p>
+
+                            <div class="vendor-actions">
+                                <a 
+                                    href="EMWBookAnEvent.php?vendorID=<?php echo $vendor['VendorID']; ?>" 
+                                    class="black-btn"
+                                >
+                                    Book Vendor
+                                </a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <p>No vendors found. Try changing your search filters.</p>
+                <?php endif; ?>
+            </div>
+
+            <p class="scroll-note">scroll down to see more vendors</p>
+        </div>
+    </main>
+</div>
+
+</body>
 </html>
