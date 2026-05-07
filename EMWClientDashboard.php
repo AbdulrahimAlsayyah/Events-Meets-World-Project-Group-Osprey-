@@ -1,4 +1,4 @@
-<?php 
+<?php  
 session_start();
 require 'EMWConfig.php';
 
@@ -18,7 +18,7 @@ $stmt = $conn->prepare("
     JOIN Payment ON Eventt.PaymentFK = Payment.PaymentID
     JOIN Vendor ON Eventt.VendorFK = Vendor.VendorID
     WHERE Payment.CustomerFK = ?
-    AND Eventt.EventStates != 'Cancelled'
+    AND Eventt.EventStates = 'Scheduled'
     ORDER BY Eventt.EventDate ASC
 ");
 
@@ -26,13 +26,11 @@ $stmt->bind_param("i", $customerID);
 $stmt->execute();
 $result = $stmt->get_result();
 
-// Store events
 $events = [];
 while ($row = $result->fetch_assoc()) {
     $events[] = $row;
 }
 
-// Count events
 $eventCount = count($events);
 
 // Get sent reviews
@@ -47,13 +45,11 @@ $stmt2->bind_param("i", $customerID);
 $stmt2->execute();
 $result2 = $stmt2->get_result();
 
-// Store reviews
 $reviews = [];
 while ($row = $result2->fetch_assoc()) {
     $reviews[] = $row;
 }
 
-// Count reviews
 $reviewCount = count($reviews);
 
 $errorMessage = '';
@@ -61,12 +57,9 @@ $message = '';
 $errorMessage2 = '';
 $message2 = '';
 
+// Activate membership
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createMembership'])) {
 
-    // Get logged-in customer
-    $customerID = $_SESSION['customer']['CustomerID'];
-
-    // Get current membership
     $check = $conn->prepare("
         SELECT Membership.MembershipID, Membership.MembershipStates
         FROM Membership
@@ -81,14 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createMembership'])) 
 
     if ($membership) {
 
-        // Already active
         if ($membership['MembershipStates'] === 'Active') {
-
             $errorMessage = "You already have an active membership.";
-
-        } else if ($membership['MembershipStates'] === 'Inactive') {
-
-            // UPDATE existing membership
+        } else {
             $update = $conn->prepare("
                 UPDATE Membership
                 SET MembershipStates = 'Active',
@@ -100,34 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createMembership'])) 
             $update->bind_param("i", $membership['MembershipID']);
 
             if ($update->execute()) {
-
-                // Update session
                 $_SESSION['customer']['MembershipFK'] = $membership['MembershipID'];
-
                 $message = "Membership activated successfully!";
-
-            } else {
-                $errorMessage = "Error updating membership.";
-            }
-        } else {
-
-            // UPDATE existing membership
-            $update = $conn->prepare("
-                UPDATE Membership
-                SET MembershipStates = 'Active',
-                    EndDate = NULL
-                WHERE MembershipID = ?
-            ");
-
-            $update->bind_param("i", $membership['MembershipID']);
-
-            if ($update->execute()) {
-
-                // Update session
-                $_SESSION['customer']['MembershipFK'] = $membership['MembershipID'];
-
-                $message = "Membership activated successfully!";
-
             } else {
                 $errorMessage = "Error updating membership.";
             }
@@ -137,11 +99,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['createMembership'])) 
         $errorMessage = "No membership found for this user.";
     }
 }
+
+// Cancel membership
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelMembership'])) {
 
-    $customerID = $_SESSION['customer']['CustomerID'];
-
-    // Step 1: Get current membership state
     $check = $conn->prepare("
         SELECT Membership.MembershipID, Membership.MembershipStates
         FROM Membership
@@ -157,12 +118,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelMembership'])) 
 
         $membership = $result->fetch_assoc();
 
-        // Already cancelled
         if ($membership['MembershipStates'] === 'Cancelled') {
             $errorMessage2 = "Membership is already cancelled.";
+        } else if ($membership['MembershipStates'] === 'Inactive') {
+            $errorMessage2 = "No active membership found.";
         } else {
-
-            // Step 2: Cancel membership
             $stmt = $conn->prepare("
                 UPDATE Membership
                 SET MembershipStates = 'Cancelled',
@@ -178,15 +138,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelMembership'])) 
                 $errorMessage2 = "Error cancelling membership.";
             }
         }
-
     } else {
-        $errorMessage2 = "No active membership found.";
+        $errorMessage2 = "No membership found.";
     }
 }
-
 ?>
 
-<link rel="stylesheet" href="EMWStyles.css">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Client Dashboard</title>
+    <link rel="stylesheet" href="EMWStyles.css">
+
+    <style>
+        .sidebar a,
+        .sidebar a:visited,
+        .sidebar a:hover,
+        .sidebar a:active {
+            color: white;
+            text-decoration: none;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+        }
+
+        .modal-content {
+            background: white;
+            width: 400px;
+            margin: 15% auto;
+            padding: 25px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .modal-cancel {
+            background: #ccc;
+            color: black;
+            padding: 10px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .modal-confirm {
+            background: black;
+            color: white;
+            padding: 10px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .form2 button {
+            background: black;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .form2 button:hover {
+            background: #333;
+        }
+    </style>
+</head>
+
+<body>
 
 <div class="top-nav">
     <img src="EMW Logo 1.png" class="logo">
@@ -202,10 +236,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelMembership'])) 
     <aside class="sidebar">
         <h3>Dashboard</h3>
         <ul>
-            <li>My Events</li>
-            <li>Browse Vendors</li>
+            <li><a href="EMWCustomerBookings.php">My Events</a></li>
+            <li><a href="EMWBrowseVendors.php">Browse Vendors</a></li>
             <li>Messages</li>
-            <li>Reviews</li>
+            <li><a href="EMWCustomerReviews.php">Reviews</a></li>
             <li>Settings</li>
         </ul>
     </aside>
@@ -216,7 +250,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelMembership'])) 
             <?php echo htmlspecialchars($customer['FirstName']); ?>
         </h2>
 
-        <!-- STATS -->
         <div class="stats">
             <div class="card">
                 <?php echo $eventCount; ?><br>Upcoming Events
@@ -225,66 +258,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancelMembership'])) 
             <div class="card"><?php echo $reviewCount; ?><br>Reviews Sent</div>
         </div>
 
-        <!-- EVENTS -->
         <div class="events">
             <h3>Upcoming Events</h3>
 
             <?php if ($eventCount > 0): ?>
+                <?php $count = 0; ?>
                 <?php foreach ($events as $event): ?>
+                    <?php if ($count >= 3) break; ?>
+                    
                     <div class="event">
-                        <strong><?php echo $event['EventType']; ?></strong><br>
-                        Vendor: <?php echo $event['VendorName']; ?><br>
-                        Date: <?php echo $event['EventDate']; ?><br>
-                        Status: <?php echo $event['EventStates']; ?>
+                        <strong><?php echo htmlspecialchars($event['EventType']); ?></strong><br>
+                        Vendor: <?php echo htmlspecialchars($event['VendorName']); ?><br>
+                        Date: <?php echo htmlspecialchars($event['EventDate']); ?><br>
+                        Status: <?php echo htmlspecialchars($event['EventStates']); ?>
                     </div>
+                    
+                    <?php $count++; ?>
                 <?php endforeach; ?>
             <?php else: ?>
                 <p>No upcoming events.</p>
             <?php endif; ?>
-
         </div>
 
-        <!-- MESSAGES (placeholder) -->
         <div class="messages">
             <h3>Recent Messages</h3>
             <p>No messages yet.</p>
         </div>
-    <div class="form2">
-        <h2>Memberships</h2>
-    
-        <form method="POST">
-            <!-- Membership Type -->
-            <select name="MembershipType" required>
-                <option value="">Select Membership Type</option>
-                <option value="Standard">Standard - Exclusive Deals, Up to 30% off on all Events</option>
-            </select>
-    
-            <button type="submit" name="createMembership">
-                Become a Member
-            </button>
-            <p style="color:red;"><?php echo $errorMessage; ?></p>
-            <p style="color:green;"><?php echo $message; ?></p>
-        </form>
-        <form method="POST" onsubmit="return confirmCancel()">
 
-            <button type="submit" name="cancelMembership">
+        <div class="form2">
+            <h2>Memberships</h2>
+        
+            <form method="POST">
+                <select name="MembershipType" required>
+                    <option value="">Select Membership Type</option>
+                    <option value="Standard">Standard - Exclusive Deals, Up to 30% off on all Events</option>
+                </select>
+        
+                <button type="submit" name="createMembership">
+                    Become a Member
+                </button>
+
+                <p style="color:red;"><?php echo $errorMessage; ?></p>
+                <p style="color:green;"><?php echo $message; ?></p>
+            </form>
+
+            <button type="button" onclick="openMembershipModal()">
                 Cancel Membership
             </button>
-        
+
             <p style="color:red;"><?php echo $errorMessage2; ?></p>
             <p style="color:green;"><?php echo $message2; ?></p>
 
-        </form>
+            <div id="membershipCancelModal" class="modal">
+                <div class="modal-content">
+                    <h3>Cancel Membership</h3>
+                    <p>Are you sure you want to cancel your membership?</p>
 
-        <script>
-        function confirmCancel() {
-            return confirm("Are you sure you want to cancel your membership?");
-        }
-        </script>
+                    <div class="modal-actions">
+                        <button type="button" class="modal-cancel" onclick="closeMembershipModal()">
+                            No
+                        </button>
 
-    
-    </div>
+                        <form method="POST">
+                            <button type="submit" name="cancelMembership" class="modal-confirm">
+                                Yes, Cancel
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     </main>
 
 </div>
+
+<script>
+function openMembershipModal() {
+    document.getElementById("membershipCancelModal").style.display = "block";
+}
+
+function closeMembershipModal() {
+    document.getElementById("membershipCancelModal").style.display = "none";
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById("membershipCancelModal");
+
+    if (event.target === modal) {
+        modal.style.display = "none";
+    }
+}
+</script>
+
+</body>
+</html>
