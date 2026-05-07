@@ -101,6 +101,16 @@ while ($row = $result->fetch_assoc()) {
     <link rel="stylesheet" href="EMWStyles.css">
 </head>
 
+<style>
+    .sidebar a,
+    .sidebar a:visited,
+    .sidebar a:hover,
+    .sidebar a:active {
+        color: white;
+        text-decoration: none;
+    }
+</style>
+
 <body>
 
 <!-- TOP NAV -->
@@ -119,7 +129,7 @@ while ($row = $result->fetch_assoc()) {
     <aside class="sidebar">
         <ul>
             <li>Dashboard</li>
-            <li>Bookings</li>
+            <li><a href="EMWVendorBookings.php">Bookings</a></li>
             <li>Enquiries</li>
             <li>My Profile</li>
             <li>Reviews</li>
