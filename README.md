@@ -34,7 +34,7 @@ Hybird Approach- cmbination of both Scrum(Agile) and the traditional SDLC.
 - Performance check, Bug fixing
 
 ## Testing Assurance 
-The testing that occured with the stages of the sprints were...
+The testing that occured with the stages of the sprints were functionality testing, usability testing.
 ## Project Deliverables
 - Proof of concept
 - Full documentation presented
